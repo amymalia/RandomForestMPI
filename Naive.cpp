@@ -15,10 +15,13 @@
 #include <cstdio>
 #include <vector>
 #include <iostream>
+#include <mpi.h>
+
 
 using namespace std;
 using namespace cv;
 using namespace cv::ml;
+double start_time;
 
 static void help()
 {
@@ -131,6 +134,9 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
                                      int ntrain_samples, int rdelta,
                                      const string& filename_to_save)
 {
+	fprintf(stdout,"CONSTRUCTION RUNTIME: %f - %f = %f\n", MPI_Wtime(), start_time, MPI_Wtime() - start_time);
+	start_time = MPI_Wtime();
+
     int i, nsamples_all = data.rows;
     double train_hr = 0, test_hr = 0;
 	
@@ -196,7 +202,7 @@ build_rtrees_classifier( const string& data_filename,
 		//                   TermCriteria termCrit );
         Ptr<TrainData> tdata = prepare_train_data(data, responses, ntrain_samples);
         model = RTrees::create();
-        model->setMaxDepth(10);
+        model->setMaxDepth(100);
         model->setMinSampleCount(10);
         model->setRegressionAccuracy(0);
         model->setUseSurrogates(false);
@@ -234,8 +240,17 @@ int main( int argc, char *argv[] )
     string filename_to_load = "";
     string data_filename = "../opencv-3.0.0/samples/data/letter-recognition.data";
     int method = 0;
+	int my_rank, num_procs;
 	
-    int i;
+	MPI_Group orig_group, row_group, col_group;
+	MPI_Comm row_comm, col_comm;
+	MPI_Init(&argc, &argv);
+	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+	
+	start_time = MPI_Wtime();
+    
+	int i;
     for( i = 1; i < argc; i++ )
     {
         if( strcmp(argv[i],"-data") == 0 ) // flag "-data letter_recognition.xml"
@@ -264,5 +279,10 @@ int main( int argc, char *argv[] )
     {
         help();
     }
+	fprintf(stdout,"CLASSIFICATION RUNTIME: %f - %f = %f\n", MPI_Wtime(), start_time, MPI_Wtime() - start_time);
+
+	// Clean-up
+	MPI_Finalize();
+
     return 0;
 }

@@ -22,7 +22,7 @@ using namespace std;
 using namespace cv;
 using namespace cv::ml;
 
-int my_rank, num_procs;
+double start_time;
 
 static void help()
 {
@@ -133,7 +133,9 @@ inline TermCriteria TC(int iters, double eps)
 static void test_and_save_classifier(const Ptr<StatModel>& model,
                                      const Mat& data, const Mat& responses,
                                      int ntrain_samples, int rdelta,
-                                     const string& filename_to_save)
+                                     const string& filename_to_save,
+									 int my_rank,
+									 int num_procs)
 {
     int i, nsamples_all = data.rows;
     double train_hr = 0, test_hr = 0;
@@ -146,13 +148,17 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
 		}
 		int fin = 1;
 		printf("RANK: %d", my_rank);
-
+		
 		MPI_Bcast(&fin, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
+		
 		printf("RANK: %d", my_rank);
 	}
 	MPI_Barrier(MPI_COMM_WORLD);
-
+	if(my_rank == 0){
+		fprintf(stdout,"CONSTRUCTION RUNTIME: %f - %f = %f\n", MPI_Wtime(), start_time, MPI_Wtime() - start_time);
+		start_time = MPI_Wtime();
+	}
+	
 	if (my_rank == 0) {
 		// compute prediction error on train and test data
 		int curr_task = 0;
@@ -176,8 +182,8 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
 		MPI_Recv(&i, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
 		
 		printf("RANK: %d", my_rank);
-
-
+		
+		
 		Mat sample = data.row(i);
 		
 		float r = model->predict( sample );
@@ -193,26 +199,22 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
 	
 	MPI_Reduce(&train_hr, &train_hr, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&test_hr, &test_hr, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-
+	
     test_hr /= nsamples_all - ntrain_samples;
     train_hr = ntrain_samples > 0 ? train_hr/ntrain_samples : 1.;
 	
 	if (my_rank == 0) {
 		printf( "Recognition rate: train = %.1f%%, test = %.1f%%\n",
 			   train_hr*100., test_hr*100. );
-		
-		if( !filename_to_save.empty() )
-		{
-			model->save( filename_to_save );
-		}
 	}
 }
-
 
 static bool
 build_rtrees_classifier( const string& data_filename,
 						const string& filename_to_save,
-						const string& filename_to_load )
+						const string& filename_to_load, 
+						int my_rank,
+						int num_procs)
 {
     Mat data;
     Mat responses;
@@ -257,7 +259,7 @@ build_rtrees_classifier( const string& data_filename,
         cout << endl;
     }
 	
-    test_and_save_classifier(model, data, responses, ntrain_samples, 0, filename_to_save);
+    test_and_save_classifier(model, data, responses, ntrain_samples, 0, filename_to_save, my_rank, num_procs);
     cout << "Number of trees: " << model->getRoots().size() << endl;
 	
     // Print variable importance
@@ -283,6 +285,7 @@ int main( int argc, char *argv[] )
     string data_filename = "../opencv-3.0.0/samples/data/letter-recognition.data";
     int method = 0;
 	int fin;
+	int my_rank, num_procs;
 	
 	MPI_Group orig_group, row_group, col_group;
 	MPI_Comm row_comm, col_comm;
@@ -291,11 +294,8 @@ int main( int argc, char *argv[] )
 	MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 	
 	// Start the timer
-	double start_time;
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (my_rank == 0) {  
-		printf("RANK: %d", my_rank);
-
 		start_time = MPI_Wtime();
 	}
 	
@@ -322,27 +322,24 @@ int main( int argc, char *argv[] )
     }
 	
 	if(my_rank == 0) {
-		printf("RANK: %d", my_rank);
-
 		filename_to_save = "tree";
 		fin = 1;
 		if( i < argc ||
 		   (method == 0 ?
-			build_rtrees_classifier( data_filename, filename_to_save, filename_to_load ) :
+			build_rtrees_classifier( data_filename, filename_to_save, filename_to_load, my_rank, num_procs ) :
 			method == 1 ))
 		{
 			help();
 		}
+		MPI_Bcast(&fin, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		printf("RANK: %d", my_rank);
-		fprintf(stdout,"COMMUNICATION RUNTIME: %f - %f = %f\n", MPI_Wtime(), start_time, MPI_Wtime() - start_time);
-		start_time = MPI_Wtime();
 	}
 	else {
 		MPI_Bcast(&fin, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		filename_to_load = "tree";
 		if( i < argc ||
 		   (method == 0 ?
-			build_rtrees_classifier( data_filename, filename_to_save, filename_to_load ) :
+			build_rtrees_classifier( data_filename, filename_to_save, filename_to_load, my_rank, num_procs ) :
 			method == 1 ))
 		{
 			help();
@@ -352,7 +349,7 @@ int main( int argc, char *argv[] )
 	
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (0 == my_rank) {
-		fprintf(stdout,"COMMUNICATION RUNTIME: %f - %f = %f\n", MPI_Wtime(), start_time, MPI_Wtime() - start_time);
+		fprintf(stdout,"CLASSIFICATION RUNTIME: %f - %f = %f\n", MPI_Wtime(), start_time, MPI_Wtime() - start_time);
 	}
 	// Clean-up
 	MPI_Finalize();
