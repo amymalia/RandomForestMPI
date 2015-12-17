@@ -139,6 +139,8 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
 {
     int i, nsamples_all = data.rows;
     double train_hr = 0, test_hr = 0;
+	double train_hr_global = 0, test_hr_global = 0;
+
 	
 	if (my_rank == 0) {
 		//save classifier first so other processors have access
@@ -147,11 +149,8 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
 			model->save( filename_to_save );
 		}
 		int fin = 1;
-		printf("RANK: %d", my_rank);
 		
 		MPI_Bcast(&fin, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		
-		printf("RANK: %d", my_rank);
 	}
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(my_rank == 0){
@@ -174,38 +173,53 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
 			MPI_Recv(&r, 1, MPI_INT, MPI_ANY_SOURCE, 1, MPI_COMM_WORLD, &status);
 			MPI_Send(&curr_task, 1, MPI_INT, status.MPI_SOURCE, 1, MPI_COMM_WORLD);
 			curr_task++;
+			if(status.MPI_SOURCE != 0){
+		//		printf("Task %d to process %d \n", curr_task, status.MPI_SOURCE);
+			}
+		}
+		//tell all processors to stop receiving
+		int a = -1;
+		for (i = 0; i < num_procs; i++) {
+			MPI_Send(&a, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
 		}
 	}
 	else {
-		int i;
-		MPI_Status status;
-		MPI_Recv(&i, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
-		
-		printf("RANK: %d", my_rank);
-		
-		
-		Mat sample = data.row(i);
-		
-		float r = model->predict( sample );
-		r = std::abs(r + rdelta - responses.at<int>(i)) <= FLT_EPSILON ? 1.f : 0.f;
-		
-		if( i < ntrain_samples )
-			train_hr += r;
-		else
-			test_hr += r;	
-		
-		MPI_Send(&i, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+		int stop = 1;
+		while(stop != 0){
+			int i;
+			MPI_Status status;
+			MPI_Recv(&i, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
+			if (i == -1) {
+				stop = 0;
+			}
+			else{
+				Mat sample = data.row(i);
+				
+				float r = model->predict( sample );
+				r = std::abs(r + rdelta - responses.at<int>(i)) <= FLT_EPSILON ? 1.f : 0.f;
+				
+				if( i < ntrain_samples ){
+					train_hr += r;
+				}
+				else{
+					test_hr += r;	
+				}
+								
+				MPI_Send(&i, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+			}
+			//printf("Task %d to process %d", i, my_rank);
+		}
 	}
 	
-	MPI_Reduce(&train_hr, &train_hr, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&test_hr, &test_hr, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&train_hr, &train_hr_global, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
 	
-    test_hr /= nsamples_all - ntrain_samples;
-    train_hr = ntrain_samples > 0 ? train_hr/ntrain_samples : 1.;
-	
-	if (my_rank == 0) {
+	if (my_rank == 0) {		
+		printf("FINAL!! test: %f ; train: %f; nsamples: %d; trainsamples: %d\n", test_hr_global, train_hr_global, nsamples_all, ntrain_samples);
+		test_hr_global /= nsamples_all - ntrain_samples;
+		train_hr_global = ntrain_samples > 0 ? train_hr_global/ntrain_samples : 1.;
 		printf( "Recognition rate: train = %.1f%%, test = %.1f%%\n",
-			   train_hr*100., test_hr*100. );
+			   train_hr_global*100., test_hr_global*100. );
 	}
 }
 
@@ -233,7 +247,7 @@ build_rtrees_classifier( const string& data_filename,
         model = load_classifier<RTrees>(filename_to_load);
         if( model.empty() )
             return false;
-        ntrain_samples = 0;
+        //ntrain_samples = 0;
     }
     else
     {
@@ -246,7 +260,7 @@ build_rtrees_classifier( const string& data_filename,
 		//                   TermCriteria termCrit );
         Ptr<TrainData> tdata = prepare_train_data(data, responses, ntrain_samples);
         model = RTrees::create();
-        model->setMaxDepth(10);
+        model->setMaxDepth(1000);
         model->setMinSampleCount(10);
         model->setRegressionAccuracy(0);
         model->setUseSurrogates(false);
@@ -260,17 +274,17 @@ build_rtrees_classifier( const string& data_filename,
     }
 	
     test_and_save_classifier(model, data, responses, ntrain_samples, 0, filename_to_save, my_rank, num_procs);
-    cout << "Number of trees: " << model->getRoots().size() << endl;
+//    cout << "Number of trees: " << model->getRoots().size() << endl;
 	
     // Print variable importance
     Mat var_importance = model->getVarImportance();
     if( !var_importance.empty() )
     {
         double rt_imp_sum = sum( var_importance )[0];
-        printf("var#\timportance (in %%):\n");
+//        printf("var#\timportance (in %%):\n");
         int i, n = (int)var_importance.total();
-        for( i = 0; i < n; i++ )
-            printf( "%-2d\t%-4.1f\n", i, 100.f*var_importance.at<float>(i)/rt_imp_sum);
+//        for( i = 0; i < n; i++ )
+//            printf( "%-2d\t%-4.1f\n", i, 100.f*var_importance.at<float>(i)/rt_imp_sum);
     }
 	
     return true;
@@ -329,7 +343,7 @@ int main( int argc, char *argv[] )
 			build_rtrees_classifier( data_filename, filename_to_save, filename_to_load, my_rank, num_procs ) :
 			method == 1 ))
 		{
-			help();
+		//	help();
 		}
 		MPI_Bcast(&fin, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		printf("RANK: %d", my_rank);
@@ -342,9 +356,8 @@ int main( int argc, char *argv[] )
 			build_rtrees_classifier( data_filename, filename_to_save, filename_to_load, my_rank, num_procs ) :
 			method == 1 ))
 		{
-			help();
+		//	help();
 		}
-		printf("RANK: %d", my_rank);
 	}
 	
 	MPI_Barrier(MPI_COMM_WORLD);
