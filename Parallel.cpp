@@ -174,7 +174,6 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
 			MPI_Send(&curr_task, 1, MPI_INT, status.MPI_SOURCE, 1, MPI_COMM_WORLD);
 			curr_task++;
 			if(status.MPI_SOURCE != 0){
-		//		printf("Task %d to process %d \n", curr_task, status.MPI_SOURCE);
 			}
 		}
 		//tell all processors to stop receiving
@@ -207,15 +206,14 @@ static void test_and_save_classifier(const Ptr<StatModel>& model,
 								
 				MPI_Send(&i, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
 			}
-			//printf("Task %d to process %d", i, my_rank);
 		}
 	}
 	
-	MPI_Reduce(&train_hr, &train_hr_global, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&train_hr, &train_hr_global, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&test_hr, &test_hr_global, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
 	
 	if (my_rank == 0) {		
-		printf("FINAL!! test: %f ; train: %f; nsamples: %d; trainsamples: %d\n", test_hr_global, train_hr_global, nsamples_all, ntrain_samples);
 		test_hr_global /= nsamples_all - ntrain_samples;
 		train_hr_global = ntrain_samples > 0 ? train_hr_global/ntrain_samples : 1.;
 		printf( "Recognition rate: train = %.1f%%, test = %.1f%%\n",
