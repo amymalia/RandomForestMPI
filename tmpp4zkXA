@@ -1,0 +1,44 @@
+<?xml version='1.0'?>
+<!DOCTYPE platform SYSTEM "http://simgrid.gforge.inria.fr/simgrid.dtd">
+<platform version="3">
+  <process host="host-0.hawaii.edu" function="0"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="0"/> <!-- rank -->
+  </process>
+  <process host="host-1.hawaii.edu" function="1"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="1"/> <!-- rank -->
+  </process>
+  <process host="host-2.hawaii.edu" function="2"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="2"/> <!-- rank -->
+  </process>
+  <process host="host-3.hawaii.edu" function="3"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="3"/> <!-- rank -->
+  </process>
+  <process host="host-4.hawaii.edu" function="4"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="4"/> <!-- rank -->
+  </process>
+  <process host="host-5.hawaii.edu" function="5"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="5"/> <!-- rank -->
+  </process>
+  <process host="host-6.hawaii.edu" function="6"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="6"/> <!-- rank -->
+  </process>
+  <process host="host-7.hawaii.edu" function="7"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="7"/> <!-- rank -->
+  </process>
+  <process host="host-8.hawaii.edu" function="8"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="8"/> <!-- rank -->
+  </process>
+  <process host="host-9.hawaii.edu" function="9"> <!-- function name used only for logging -->
+    <argument value="1"/> <!-- instance -->
+    <argument value="9"/> <!-- rank -->
+  </process>
+</platform>
